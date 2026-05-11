@@ -1,0 +1,444 @@
+const express = require("express");
+const fs = require("fs");
+const fsp = require("fs/promises");
+const path = require("path");
+const crypto = require("crypto");
+const multer = require("multer");
+
+const app = express();
+const PORT = Number(process.env.PORT || 3000);
+const HOST = process.env.HOST || "127.0.0.1";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "videowall-admin";
+
+const DATA_DIR = path.join(__dirname, "data");
+const STATE_DIR = path.join(DATA_DIR, "state");
+const UPLOAD_DIR = path.join(DATA_DIR, "uploads");
+const MEDIA_FILE = path.join(STATE_DIR, "media.json");
+const SETTINGS_FILE = path.join(STATE_DIR, "settings.json");
+
+const sessions = new Map();
+const IMAGE_TYPES = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"]);
+const VIDEO_TYPES = new Set([".mp4", ".webm", ".ogg", ".mov", ".m4v"]);
+const TRANSITIONS = new Set(["fade", "slide", "zoom", "none"]);
+const BACKGROUND_TYPES = new Set(["color", "gradient"]);
+
+const defaultSettings = {
+  imageDuration: 8,
+  transition: "fade",
+  syncMode: "sync",
+  videoFit: "contain",
+  background: {
+    type: "gradient",
+    value: "linear-gradient(135deg, #0f172a 0%, #111827 50%, #1f2937 100%)"
+  }
+};
+
+function ensureDirectories() {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+  fs.mkdirSync(STATE_DIR, { recursive: true });
+}
+
+async function ensureStateFiles() {
+  await ensureJsonFile(MEDIA_FILE, []);
+  await ensureJsonFile(SETTINGS_FILE, defaultSettings);
+}
+
+async function ensureJsonFile(filePath, fallback) {
+  try {
+    await fsp.access(filePath);
+  } catch {
+    await writeJson(filePath, fallback);
+  }
+}
+
+async function readJson(filePath, fallback) {
+  try {
+    const raw = await fsp.readFile(filePath, "utf8");
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
+async function writeJson(filePath, data) {
+  await fsp.writeFile(filePath, JSON.stringify(data, null, 2), "utf8");
+}
+
+function parseCookies(cookieHeader = "") {
+  return cookieHeader
+    .split(";")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .reduce((acc, item) => {
+      const index = item.indexOf("=");
+      if (index === -1) return acc;
+      const key = item.slice(0, index);
+      const value = decodeURIComponent(item.slice(index + 1));
+      acc[key] = value;
+      return acc;
+    }, {});
+}
+
+function isAuthenticated(req) {
+  const cookies = parseCookies(req.headers.cookie);
+  const token = cookies.videowall_admin;
+  if (!token) return false;
+  const session = sessions.get(token);
+  if (!session) return false;
+  if (session.expiresAt < Date.now()) {
+    sessions.delete(token);
+    return false;
+  }
+  session.expiresAt = Date.now() + 1000 * 60 * 60 * 24;
+  return true;
+}
+
+function requireAuth(req, res, next) {
+  if (!isAuthenticated(req)) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  next();
+}
+
+function sanitizeFilename(name) {
+  return name.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+function buildStoredFilename(originalName) {
+  const ext = path.extname(originalName).toLowerCase();
+  return `${Date.now()}-${crypto.randomUUID()}${ext}`;
+}
+
+function inferMediaType(filename) {
+  const ext = path.extname(filename).toLowerCase();
+  if (IMAGE_TYPES.has(ext)) return "image";
+  if (VIDEO_TYPES.has(ext)) return "video";
+  return null;
+}
+
+function mediaPublicUrl(filename) {
+  return `/uploads/${encodeURIComponent(filename)}`;
+}
+
+async function getMedia() {
+  const media = await readJson(MEDIA_FILE, []);
+  return media.sort((a, b) => a.order - b.order);
+}
+
+async function saveMedia(media) {
+  const normalized = media
+    .sort((a, b) => a.order - b.order)
+    .map((item, index) => ({ ...item, order: index }));
+  await writeJson(MEDIA_FILE, normalized);
+  return normalized;
+}
+
+async function getSettings() {
+  const settings = await readJson(SETTINGS_FILE, defaultSettings);
+  return {
+    ...defaultSettings,
+    ...settings,
+    background: {
+      ...defaultSettings.background,
+      ...(settings.background || {})
+    }
+  };
+}
+
+async function saveSettings(input) {
+  const nextSettings = await getSettings();
+  if (typeof input.imageDuration === "number" && Number.isFinite(input.imageDuration)) {
+    nextSettings.imageDuration = Math.max(1, Math.min(3600, Math.round(input.imageDuration)));
+  }
+  if (typeof input.transition === "string" && TRANSITIONS.has(input.transition)) {
+    nextSettings.transition = input.transition;
+  }
+  if (typeof input.syncMode === "string" && ["sync", "independent"].includes(input.syncMode)) {
+    nextSettings.syncMode = input.syncMode;
+  }
+  if (typeof input.videoFit === "string" && ["contain", "cover"].includes(input.videoFit)) {
+    nextSettings.videoFit = input.videoFit;
+  }
+  if (input.background && typeof input.background === "object") {
+    const type = typeof input.background.type === "string" ? input.background.type : nextSettings.background.type;
+    const value = typeof input.background.value === "string" ? input.background.value.trim() : nextSettings.background.value;
+    if (BACKGROUND_TYPES.has(type) && value) {
+      nextSettings.background = { type, value };
+    }
+  }
+  await writeJson(SETTINGS_FILE, nextSettings);
+  return nextSettings;
+}
+
+async function getPlaylist() {
+  const media = await getMedia();
+  return media.filter((item) => item.enabled);
+}
+
+async function buildPlaybackSnapshot() {
+  const settings = await getSettings();
+  const playlist = await getPlaylist();
+  const now = Date.now();
+  if (playlist.length === 0) {
+    return {
+      settings,
+      playlist,
+      currentIndex: -1,
+      currentItem: null,
+      startedAt: now
+    };
+  }
+
+  if (settings.syncMode === "independent") {
+    return {
+      settings,
+      playlist,
+      currentIndex: 0,
+      currentItem: playlist[0],
+      startedAt: now
+    };
+  }
+
+  const cycle = [];
+  for (const item of playlist) {
+    const durationSeconds = item.type === "video" ? Number(item.durationSeconds || 15) : settings.imageDuration;
+    cycle.push(Math.max(1, durationSeconds) * 1000);
+  }
+
+  const totalDuration = cycle.reduce((sum, duration) => sum + duration, 0);
+  let offset = totalDuration === 0 ? 0 : now % totalDuration;
+  let currentIndex = 0;
+  for (let i = 0; i < cycle.length; i += 1) {
+    if (offset < cycle[i]) {
+      currentIndex = i;
+      break;
+    }
+    offset -= cycle[i];
+  }
+
+  return {
+    settings,
+    playlist,
+    currentIndex,
+    currentItem: playlist[currentIndex],
+    startedAt: now - offset
+  };
+}
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+  filename: (_req, file, cb) => cb(null, buildStoredFilename(sanitizeFilename(file.originalname)))
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 1024 * 1024 * 250 },
+  fileFilter: (_req, file, cb) => {
+    const type = inferMediaType(file.originalname);
+    if (!type) {
+      cb(new Error("Unsupported file type"));
+      return;
+    }
+    cb(null, true);
+  }
+});
+
+app.use(express.json({ limit: "1mb" }));
+app.use("/uploads", express.static(UPLOAD_DIR, {
+  etag: true,
+  lastModified: true,
+  maxAge: "1d"
+}));
+app.use("/static", express.static(path.join(__dirname, "public")));
+
+app.get("/", (_req, res) => {
+  res.redirect("/display");
+});
+
+app.get("/admin", (_req, res) => {
+  res.sendFile(path.join(__dirname, "public/admin/index.html"));
+});
+
+app.get("/display", (_req, res) => {
+  res.sendFile(path.join(__dirname, "public/display/index.html"));
+});
+
+app.get("/api/session", (req, res) => {
+  res.json({ authenticated: isAuthenticated(req) });
+});
+
+app.post("/api/login", async (req, res) => {
+  const { password } = req.body || {};
+  if (password !== ADMIN_PASSWORD) {
+    res.status(401).json({ error: "Invalid password" });
+    return;
+  }
+
+  const token = crypto.randomUUID();
+  sessions.set(token, { expiresAt: Date.now() + 1000 * 60 * 60 * 24 });
+  res.setHeader("Set-Cookie", `videowall_admin=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Strict; Max-Age=86400`);
+  res.json({ ok: true });
+});
+
+app.post("/api/logout", requireAuth, (_req, res) => {
+  const cookies = parseCookies(_req.headers.cookie);
+  const token = cookies.videowall_admin;
+  if (token) {
+    sessions.delete(token);
+  }
+  res.setHeader("Set-Cookie", "videowall_admin=; HttpOnly; Path=/; SameSite=Strict; Max-Age=0");
+  res.json({ ok: true });
+});
+
+app.get("/api/settings", async (_req, res) => {
+  const settings = await getSettings();
+  res.json(settings);
+});
+
+app.post("/api/settings", requireAuth, async (req, res) => {
+  const settings = await saveSettings(req.body || {});
+  res.json(settings);
+});
+
+app.get("/api/media", async (_req, res) => {
+  const media = await getMedia();
+  res.json(media.map((item) => ({ ...item, url: mediaPublicUrl(item.filename) })));
+});
+
+app.post("/api/media", requireAuth, upload.array("files", 50), async (req, res) => {
+  const files = req.files || [];
+  const media = await getMedia();
+  let metadata = {};
+  try {
+    metadata = req.body?.metadata ? JSON.parse(req.body.metadata) : {};
+  } catch {
+    metadata = {};
+  }
+  let order = media.length;
+
+  for (const file of files) {
+    const type = inferMediaType(file.originalname || file.filename);
+    if (!type) continue;
+    const perFileMetadata = metadata[file.originalname] || {};
+    media.push({
+      id: crypto.randomUUID(),
+      type,
+      filename: file.filename,
+      originalName: file.originalname,
+      order,
+      enabled: true,
+      rotation: 0,
+      durationSeconds: type === "video" ? Math.max(1, Number(perFileMetadata.durationSeconds || 15)) : null,
+      createdAt: new Date().toISOString()
+    });
+    order += 1;
+  }
+
+  const saved = await saveMedia(media);
+  res.status(201).json(saved.map((item) => ({ ...item, url: mediaPublicUrl(item.filename) })));
+});
+
+app.patch("/api/media/:id", requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const media = await getMedia();
+  const item = media.find((entry) => entry.id === id);
+  if (!item) {
+    res.status(404).json({ error: "Media item not found" });
+    return;
+  }
+
+  const { enabled, rotation, order } = req.body || {};
+  if (typeof enabled === "boolean") {
+    item.enabled = enabled;
+  }
+  if (typeof rotation === "number" && Number.isFinite(rotation)) {
+    const normalized = ((Math.round(rotation) % 360) + 360) % 360;
+    item.rotation = normalized;
+  }
+  if (item.type === "video" && typeof req.body?.durationSeconds === "number" && Number.isFinite(req.body.durationSeconds)) {
+    item.durationSeconds = Math.max(1, req.body.durationSeconds);
+  }
+  if (typeof order === "number" && Number.isFinite(order)) {
+    const target = Math.max(0, Math.min(media.length - 1, Math.round(order)));
+    const currentIndex = media.findIndex((entry) => entry.id === id);
+    const [moved] = media.splice(currentIndex, 1);
+    media.splice(target, 0, moved);
+  }
+
+  const saved = await saveMedia(media);
+  const updated = saved.find((entry) => entry.id === id);
+  res.json({ ...updated, url: mediaPublicUrl(updated.filename) });
+});
+
+app.post("/api/media/reorder", requireAuth, async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const media = await getMedia();
+  if (ids.length !== media.length) {
+    res.status(400).json({ error: "Reorder payload must include all media ids" });
+    return;
+  }
+
+  const byId = new Map(media.map((item) => [item.id, item]));
+  const reordered = [];
+  for (const id of ids) {
+    const item = byId.get(id);
+    if (!item) {
+      res.status(400).json({ error: `Unknown media id: ${id}` });
+      return;
+    }
+    reordered.push(item);
+  }
+
+  const saved = await saveMedia(reordered);
+  res.json(saved.map((item) => ({ ...item, url: mediaPublicUrl(item.filename) })));
+});
+
+app.delete("/api/media/:id", requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const media = await getMedia();
+  const index = media.findIndex((entry) => entry.id === id);
+  if (index === -1) {
+    res.status(404).json({ error: "Media item not found" });
+    return;
+  }
+
+  const [removed] = media.splice(index, 1);
+  await saveMedia(media);
+  await fsp.rm(path.join(UPLOAD_DIR, removed.filename), { force: true });
+  res.json({ ok: true });
+});
+
+app.get("/api/playback", async (_req, res) => {
+  const snapshot = await buildPlaybackSnapshot();
+  res.json({
+    ...snapshot,
+    playlist: snapshot.playlist.map((item) => ({ ...item, url: mediaPublicUrl(item.filename) })),
+    currentItem: snapshot.currentItem ? { ...snapshot.currentItem, url: mediaPublicUrl(snapshot.currentItem.filename) } : null
+  });
+});
+
+app.use((err, _req, res, _next) => {
+  if (err instanceof multer.MulterError) {
+    res.status(400).json({ error: err.message });
+    return;
+  }
+  if (err) {
+    res.status(400).json({ error: err.message || "Request failed" });
+    return;
+  }
+  res.status(500).json({ error: "Unexpected server error" });
+});
+
+async function start() {
+  ensureDirectories();
+  await ensureStateFiles();
+  app.listen(PORT, HOST, () => {
+    console.log(`VideoWall server listening on http://${HOST}:${PORT}`);
+  });
+}
+
+start().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

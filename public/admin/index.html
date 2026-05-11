@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>VideoWall Admin</title>
+    <link rel="stylesheet" href="/static/admin/styles.css">
+  </head>
+  <body>
+    <main class="page">
+      <section id="loginCard" class="card login-card">
+        <h1>VideoWall Admin</h1>
+        <p>Mit dem Admin-Passwort anmelden, um Medien und Wiedergabe zu verwalten.</p>
+        <form id="loginForm" class="stack">
+          <label>
+            Passwort
+            <input id="passwordInput" name="password" type="password" required>
+          </label>
+          <button type="submit">Anmelden</button>
+        </form>
+        <p id="loginMessage" class="message"></p>
+        <footer class="admin-footer login-footer">
+          <p>&copy; Thorsten Friedewold IT Lösungen</p>
+          <p>Tel: 015224306810</p>
+          <p><a href="mailto:kontakt@friedewold.com">kontakt@friedewold.com</a></p>
+        </footer>
+      </section>
+
+      <section id="adminApp" class="hidden">
+        <header class="hero">
+          <div>
+            <h1>VideoWall Verwaltung</h1>
+            <p>Uploads, Reihenfolge, Rotation, Hintergründe und Wiedergabe zentral steuern.</p>
+            <div class="hero-signature">
+              <span>&copy; Thorsten Friedewold IT Lösungen</span>
+              <span>Tel: 015224306810</span>
+              <a href="mailto:kontakt@friedewold.com">kontakt@friedewold.com</a>
+            </div>
+          </div>
+          <div class="hero-actions">
+            <a class="secondary" href="/display" target="_blank" rel="noreferrer">Display öffnen</a>
+            <button id="logoutButton" class="secondary" type="button">Abmelden</button>
+          </div>
+        </header>
+
+        <section class="grid">
+          <article class="card">
+            <h2>Upload</h2>
+            <form id="uploadForm" class="stack">
+              <input id="filesInput" name="files" type="file" accept="image/*,video/*" multiple required>
+              <button type="submit">Dateien hochladen</button>
+            </form>
+            <p class="hint">Unterstützt Bilder und Videos. Uploads bleiben nach Neustarts erhalten.</p>
+            <p id="uploadMessage" class="message"></p>
+          </article>
+
+          <article class="card">
+            <h2>Wiedergabe</h2>
+            <form id="settingsForm" class="stack">
+              <label>
+                Bilddauer in Sekunden
+                <input id="imageDurationInput" name="imageDuration" type="number" min="1" max="3600" required>
+              </label>
+
+              <label>
+                Übergang
+                <select id="transitionInput" name="transition">
+                  <option value="fade">Fade</option>
+                  <option value="slide">Slide</option>
+                  <option value="zoom">Zoom</option>
+                  <option value="none">Kein Übergang</option>
+                </select>
+              </label>
+
+              <label>
+                Wiedergabemodus
+                <select id="syncModeInput" name="syncMode">
+                  <option value="sync">Synchron für alle Clients</option>
+                  <option value="independent">Unabhängig je Client</option>
+                </select>
+              </label>
+
+              <label>
+                Video-Anzeige
+                <select id="videoFitInput" name="videoFit">
+                  <option value="contain">Komplett sichtbar</option>
+                  <option value="cover">Bildschirmfüllend</option>
+                </select>
+              </label>
+
+              <label>
+                Hintergrundtyp
+                <select id="backgroundTypeInput" name="backgroundType">
+                  <option value="gradient">Gradient</option>
+                  <option value="color">Farbe</option>
+                </select>
+              </label>
+
+              <label>
+                Hintergrundwert
+                <input id="backgroundValueInput" name="backgroundValue" type="text" placeholder="z. B. #111827 oder linear-gradient(...)">
+              </label>
+
+              <button type="submit">Einstellungen speichern</button>
+            </form>
+            <p id="settingsMessage" class="message"></p>
+          </article>
+        </section>
+
+        <section class="card">
+          <div class="row-head">
+            <div>
+              <h2>Playlist</h2>
+              <p class="hint">Per Drag & Drop sortieren, Sichtbarkeit umschalten, Rotation setzen oder löschen.</p>
+            </div>
+            <button id="refreshButton" class="secondary" type="button">Aktualisieren</button>
+          </div>
+          <ul id="mediaList" class="media-list"></ul>
+          <p id="emptyState" class="hint hidden">Noch keine Medien vorhanden.</p>
+        </section>
+      </section>
+    </main>
+
+    <script src="/static/admin/app.js" defer></script>
+  </body>
+</html>

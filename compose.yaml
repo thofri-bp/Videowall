@@ -1,0 +1,18 @@
+services:
+  videowall:
+    image: videowall
+    build:
+      context: .
+      dockerfile: Dockerfile
+      platforms:
+        - linux/amd64
+    container_name: videowall
+    ports:
+      - "3000:3000"
+    environment:
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-videowall-admin}
+      HOST: 0.0.0.0
+      PORT: 3000
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
