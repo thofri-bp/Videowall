@@ -26,7 +26,11 @@ if [[ -z "${ADMIN_PASSWORD:-}" ]]; then
 fi
 
 echo "Starte VideoWall-Deployment..."
-"${COMPOSE_CMD[@]}" up -d --build
+"${COMPOSE_CMD[@]}" down --remove-orphans
+echo "Baue Docker-Image komplett neu..."
+"${COMPOSE_CMD[@]}" build --pull --no-cache
+echo "Starte fertigen Container..."
+"${COMPOSE_CMD[@]}" up -d --force-recreate
 echo "Deployment abgeschlossen."
 echo "Admin:   http://localhost:3000/admin"
 echo "Display: http://localhost:3000/display"
