@@ -68,6 +68,13 @@ Mit Docker Compose ist der Start noch einfacher:
 ADMIN_PASSWORD=mein-passwort docker compose up -d --build
 ```
 
+Oder mit dem Deploy-Skript:
+
+```bash
+chmod +x deploy.sh
+ADMIN_PASSWORD=mein-passwort ./deploy.sh
+```
+
 Stoppen:
 
 ```bash
