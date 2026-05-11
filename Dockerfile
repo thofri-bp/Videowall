@@ -1,4 +1,4 @@
-FROM --platform=$TARGETPLATFORM node:20-bookworm-slim AS build
+FROM node:20-bookworm-slim AS build
 
 WORKDIR /app
 ENV npm_config_python=/usr/bin/python3
@@ -18,7 +18,7 @@ RUN apt-get update \
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
 
-FROM --platform=$TARGETPLATFORM node:20-bookworm-slim
+FROM node:20-bookworm-slim
 
 WORKDIR /app
 
