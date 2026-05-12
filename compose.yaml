@@ -6,11 +6,15 @@ services:
       dockerfile: Dockerfile
     container_name: videowall
     ports:
-      - "3000:3000"
+      - "${HOST_PORT:-80}:3000"
     environment:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-videowall-admin}
       HOST: 0.0.0.0
       PORT: 3000
     volumes:
-      - ./data:/app/data
+      - videowall_data:/app/data
     restart: unless-stopped
+
+volumes:
+  videowall_data:
+    name: videowall_data

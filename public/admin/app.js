@@ -10,16 +10,46 @@ const loginForm = document.getElementById("loginForm");
 const loginMessage = document.getElementById("loginMessage");
 const uploadForm = document.getElementById("uploadForm");
 const uploadMessage = document.getElementById("uploadMessage");
+const uploadOverlay = document.getElementById("uploadOverlay");
+const uploadOverlayStatus = document.getElementById("uploadOverlayStatus");
+const uploadProgressBar = document.getElementById("uploadProgressBar");
 const settingsForm = document.getElementById("settingsForm");
 const settingsMessage = document.getElementById("settingsMessage");
 const mediaList = document.getElementById("mediaList");
 const emptyState = document.getElementById("emptyState");
+const clearAllButton = document.getElementById("clearAllButton");
 const refreshButton = document.getElementById("refreshButton");
 const logoutButton = document.getElementById("logoutButton");
+const filesInput = document.getElementById("filesInput");
+
+const UPLOAD_BATCH_SIZE = 10;
 
 function setMessage(element, message, isError = false) {
   element.textContent = message || "";
   element.classList.toggle("error", Boolean(isError));
+}
+
+function setUploadBusy(isBusy, status = "", progress = 0) {
+  uploadOverlay.classList.toggle("hidden", !isBusy);
+  uploadOverlay.setAttribute("aria-hidden", String(!isBusy));
+  document.body.classList.toggle("overlay-active", isBusy);
+  uploadOverlayStatus.textContent = status;
+  uploadProgressBar.style.width = `${Math.max(0, Math.min(100, progress))}%`;
+  filesInput.disabled = isBusy;
+
+  const submitButton = uploadForm.querySelector('button[type="submit"]');
+  if (submitButton) {
+    submitButton.disabled = isBusy;
+    submitButton.textContent = isBusy ? "Upload läuft..." : "Dateien hochladen";
+  }
+}
+
+function splitIntoBatches(items, size) {
+  const batches = [];
+  for (let index = 0; index < items.length; index += size) {
+    batches.push(items.slice(index, index + size));
+  }
+  return batches;
 }
 
 async function fetchJson(url, options = {}) {
@@ -74,9 +104,12 @@ function renderMedia() {
     li.className = "media-item";
     li.dataset.id = item.id;
 
-    const preview = item.type === "image"
-      ? `<img class="preview" src="${item.url}" alt="${item.originalName}">`
-      : `<div class="preview video">Video</div>`;
+    let preview = `<div class="preview video">Video</div>`;
+    if (item.type === "image") {
+      preview = `<img class="preview" src="${item.url}" alt="${item.originalName}">`;
+    } else if (item.type === "document") {
+      preview = `<div class="preview document">PDF</div>`;
+    }
 
     li.innerHTML = `
       <button class="drag-handle" type="button" aria-label="Reihenfolge aendern" title="Ziehen zum Sortieren">≡</button>
@@ -85,6 +118,35 @@ function renderMedia() {
         <h3>${item.originalName}</h3>
         <p>Typ: ${item.type} · Rotation: ${item.rotation}° · ${item.enabled ? "sichtbar" : "ausgeblendet"}</p>
         <p>Datei: ${item.filename}</p>
+        ${item.type === "document" ? `
+          <div class="document-settings">
+            <label>
+              PDF-Ansicht
+              <select class="document-view-select mini">
+                <option value="fit-width" ${item.documentView === "fit-width" ? "selected" : ""}>Breite füllen</option>
+                <option value="fit-page" ${item.documentView === "fit-page" ? "selected" : ""}>Seite einpassen</option>
+                <option value="actual-size" ${item.documentView === "actual-size" ? "selected" : ""}>Originalgröße</option>
+              </select>
+            </label>
+            <label>
+              Startseite
+              <input class="document-start-page mini-input" type="number" min="1" value="${item.documentStartPage || 1}">
+            </label>
+            <label>
+              Endseite
+              <input class="document-end-page mini-input" type="number" min="1" value="${item.documentEndPage || item.documentStartPage || 1}">
+            </label>
+            <label>
+              Seitenwechsel
+              <input class="document-page-advance mini-input" type="number" min="0" max="3600" value="${item.documentPageAdvanceSeconds || 0}">
+            </label>
+            <label>
+              Dauer ohne Wechsel
+              <input class="document-duration mini-input" type="number" min="1" max="3600" value="${item.durationSeconds || 8}">
+            </label>
+            <p class="hint">` + (item.documentPageAdvanceSeconds > 0 ? "Bei Seitenwechsel wird seitenweise automatisch weitergeschaltet." : "Bei 0 bleibt das PDF auf einer Seite und nutzt die Dauer ohne Wechsel.") + `</p>
+          </div>
+        ` : ""}
       </div>
       <div class="controls">
         <label>
@@ -108,6 +170,25 @@ function renderMedia() {
     li.querySelector(".rotation-select").addEventListener("change", async (event) => {
       await updateMedia(item.id, { rotation: Number(event.target.value) });
     });
+
+    if (item.type === "document") {
+      const saveDocumentSettings = async () => {
+        const payload = {
+          documentView: li.querySelector(".document-view-select").value,
+          documentStartPage: Number(li.querySelector(".document-start-page").value),
+          documentEndPage: Number(li.querySelector(".document-end-page").value),
+          documentPageAdvanceSeconds: Number(li.querySelector(".document-page-advance").value),
+          durationSeconds: Number(li.querySelector(".document-duration").value)
+        };
+        await updateMedia(item.id, payload);
+      };
+
+      li.querySelector(".document-view-select").addEventListener("change", saveDocumentSettings);
+      li.querySelector(".document-start-page").addEventListener("change", saveDocumentSettings);
+      li.querySelector(".document-end-page").addEventListener("change", saveDocumentSettings);
+      li.querySelector(".document-page-advance").addEventListener("change", saveDocumentSettings);
+      li.querySelector(".document-duration").addEventListener("change", saveDocumentSettings);
+    }
 
     li.querySelector(".delete-button").addEventListener("click", async () => {
       if (!window.confirm(`"${item.originalName}" wirklich löschen?`)) return;
@@ -265,34 +346,70 @@ loginForm.addEventListener("submit", async (event) => {
 uploadForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   setMessage(uploadMessage, "");
-  const files = document.getElementById("filesInput").files;
+  const files = [...filesInput.files];
   if (!files.length) {
     setMessage(uploadMessage, "Bitte zuerst Dateien auswählen.", true);
     return;
   }
 
-  const formData = new FormData();
-  const metadata = {};
-  for (const file of files) {
-    formData.append("files", file);
-    if (file.type.startsWith("video/")) {
+  try {
+    setUploadBusy(true, "Videodaten werden analysiert...", 5);
+
+    const metadata = {};
+    let processedDurations = 0;
+    const videoFiles = files.filter((file) => file.type.startsWith("video/"));
+    for (const file of videoFiles) {
       metadata[file.name] = {
         durationSeconds: await readVideoDuration(file)
       };
+      processedDurations += 1;
+      const progress = 5 + Math.round((processedDurations / Math.max(videoFiles.length, 1)) * 15);
+      setUploadBusy(true, `Videodaten werden analysiert (${processedDurations}/${videoFiles.length})...`, progress);
     }
-  }
-  formData.append("metadata", JSON.stringify(metadata));
 
-  try {
-    const response = await fetch("/api/media", { method: "POST", body: formData });
-    if (!response.ok) {
-      const payload = await response.json().catch(() => ({}));
-      throw new Error(payload.error || "Upload fehlgeschlagen.");
+    const batches = splitIntoBatches(files, UPLOAD_BATCH_SIZE);
+    let uploadedCount = 0;
+
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+      const batch = batches[batchIndex];
+      const formData = new FormData();
+      const batchMetadata = {};
+
+      for (const file of batch) {
+        formData.append("files", file);
+        if (metadata[file.name]) {
+          batchMetadata[file.name] = metadata[file.name];
+        }
+      }
+
+      formData.append("metadata", JSON.stringify(batchMetadata));
+      setUploadBusy(
+        true,
+        `Upload Paket ${batchIndex + 1} von ${batches.length} (${uploadedCount + 1}-${uploadedCount + batch.length} von ${files.length})...`,
+        20 + Math.round((uploadedCount / files.length) * 75)
+      );
+
+      const response = await fetch("/api/media", { method: "POST", body: formData });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || "Upload fehlgeschlagen.");
+      }
+
+      uploadedCount += batch.length;
+      setUploadBusy(
+        true,
+        `Upload Paket ${batchIndex + 1} von ${batches.length} abgeschlossen (${uploadedCount}/${files.length})...`,
+        20 + Math.round((uploadedCount / files.length) * 75)
+      );
     }
-    setMessage(uploadMessage, "Upload erfolgreich gespeichert.");
+
+    setUploadBusy(true, "Playlist wird aktualisiert...", 98);
     uploadForm.reset();
     await loadMedia();
+    setUploadBusy(false, "", 0);
+    setMessage(uploadMessage, `${files.length} Datei(en) erfolgreich gespeichert.`);
   } catch (error) {
+    setUploadBusy(false, "", 0);
     setMessage(uploadMessage, error.message, true);
   }
 });
@@ -325,6 +442,31 @@ settingsForm.addEventListener("submit", async (event) => {
 
 refreshButton.addEventListener("click", async () => {
   await Promise.all([loadSettings(), loadMedia()]);
+});
+
+clearAllButton.addEventListener("click", async () => {
+  if (!state.media.length) {
+    setMessage(uploadMessage, "Es sind keine Medien zum Löschen vorhanden.", true);
+    return;
+  }
+
+  const confirmed = window.confirm("Wirklich alle Inhalte löschen? Dabei werden alle hochgeladenen Dateien und Playlist-Einträge entfernt.");
+  if (!confirmed) return;
+
+  setMessage(uploadMessage, "");
+  clearAllButton.disabled = true;
+  clearAllButton.textContent = "Lösche...";
+
+  try {
+    await fetchJson("/api/media", { method: "DELETE" });
+    await loadMedia();
+    setMessage(uploadMessage, "Alle Inhalte wurden gelöscht.");
+  } catch (error) {
+    setMessage(uploadMessage, error.message, true);
+  } finally {
+    clearAllButton.disabled = false;
+    clearAllButton.textContent = "Alles löschen";
+  }
 });
 
 logoutButton.addEventListener("click", async () => {

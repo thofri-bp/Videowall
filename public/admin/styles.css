@@ -145,6 +145,11 @@ button,
   border: 1px solid var(--border);
 }
 
+.danger {
+  background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
+  color: #fff7ed;
+}
+
 .message {
   min-height: 1.2em;
   color: var(--success);
@@ -158,12 +163,85 @@ button,
   display: none !important;
 }
 
+body.overlay-active {
+  overflow: hidden;
+}
+
+.upload-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(2, 6, 23, 0.76);
+  backdrop-filter: blur(10px);
+}
+
+.upload-overlay-card {
+  width: min(460px, 100%);
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  padding: 28px;
+  text-align: center;
+}
+
+.upload-overlay-card h2 {
+  margin: 0 0 10px;
+}
+
+.upload-overlay-card p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.upload-spinner {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 18px;
+  border-radius: 999px;
+  border: 4px solid rgba(245, 158, 11, 0.18);
+  border-top-color: var(--accent);
+  animation: upload-spin 0.9s linear infinite;
+}
+
+.upload-progress {
+  width: 100%;
+  height: 12px;
+  margin-top: 18px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.upload-progress-bar {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%);
+  transition: width 180ms ease;
+}
+
+@keyframes upload-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .row-head {
   display: flex;
   justify-content: space-between;
   gap: 12px;
   align-items: center;
   margin-bottom: 16px;
+}
+
+.row-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .media-list {
@@ -237,6 +315,18 @@ button,
   border: 1px dashed var(--border);
 }
 
+.preview.document {
+  display: grid;
+  place-items: center;
+  color: var(--text);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  background:
+    linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(251, 113, 133, 0.2)),
+    rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(245, 158, 11, 0.32);
+}
+
 .media-meta {
   min-width: 0;
 }
@@ -250,6 +340,26 @@ button,
   margin: 0 0 8px;
   color: var(--muted);
   overflow-wrap: anywhere;
+}
+
+.document-settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(191, 219, 254, 0.12);
+}
+
+.document-settings .hint {
+  grid-column: 1 / -1;
+  font-size: 0.9rem;
+}
+
+.mini-input,
+.document-settings .mini {
+  min-width: 0;
+  padding: 10px 12px;
 }
 
 .controls {

@@ -20,7 +20,8 @@ Fuer Zugriff aus dem lokalen Netzwerk den Host explizit setzen:
 
 ## Funktionen
 
-- Bilder und Videos hochladen
+- Bilder, Videos und PDFs hochladen
+- PDFs werden beim Upload automatisch in Bildseiten umgewandelt
 - Reihenfolge per Drag & Drop aendern
 - Sichtbarkeit ein-/ausschalten
 - Rotation pro Medium setzen
@@ -44,21 +45,21 @@ Container starten:
 ```bash
 docker run -d \
   --name videowall \
-  -p 3000:3000 \
+  -p 80:3000 \
   -e ADMIN_PASSWORD=mein-passwort \
-  -v "$(pwd)/data:/app/data" \
+  -v videowall_data:/app/data \
   videowall
 ```
 
 Danach erreichbar unter:
 
-- Admin: `http://localhost:3000/admin`
-- Display: `http://localhost:3000/display`
+- Admin: `http://localhost/admin`
+- Display: `http://localhost/display`
 
 Fuer Zugriff aus dem Netzwerk:
 
-- Admin: `http://DEINE-IP:3000/admin`
-- Display: `http://DEINE-IP:3000/display`
+- Admin: `http://DEINE-IP/admin`
+- Display: `http://DEINE-IP/display`
 
 ## Docker Compose
 
@@ -83,7 +84,13 @@ docker compose down
 
 Danach erreichbar unter:
 
-- Admin: `http://localhost:3000/admin`
-- Display: `http://localhost:3000/display`
+- Admin: `http://localhost/admin`
+- Display: `http://localhost/display`
 
-Die Daten bleiben ueber `./data:/app/data` persistent erhalten.
+Standardmaessig wird Host-Port `80` auf Container-Port `3000` gemappt.
+Optional kannst du den Host-Port ueberschreiben, z. B. mit `HOST_PORT=8080`.
+
+Die Daten bleiben in einem Docker-Volume `videowall_data` persistent erhalten.
+Das ist robuster bei Updates, Rebuilds und Container-Neustarts.
+
+Falls du noch Daten im alten lokalen Ordner `./data` hast, migriert `./deploy.sh` sie beim ersten Deploy automatisch in das Volume, sofern das Volume noch leer ist.

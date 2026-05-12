@@ -9,6 +9,7 @@ RUN apt-get update \
     build-essential \
     g++ \
     make \
+    poppler-utils \
     python3 \
     python3-dev \
     python3-distutils \
@@ -21,6 +22,11 @@ RUN npm ci --omit=dev --no-audit --no-fund
 FROM node:20-bookworm-slim
 
 WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    poppler-utils \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/node_modules ./node_modules
 COPY package.json package-lock.json ./

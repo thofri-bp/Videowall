@@ -3,7 +3,11 @@ const fs = require("fs");
 const fsp = require("fs/promises");
 const path = require("path");
 const crypto = require("crypto");
+const { execFile } = require("child_process");
+const { promisify } = require("util");
 const multer = require("multer");
+
+const execFileAsync = promisify(execFile);
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -19,8 +23,10 @@ const SETTINGS_FILE = path.join(STATE_DIR, "settings.json");
 const sessions = new Map();
 const IMAGE_TYPES = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"]);
 const VIDEO_TYPES = new Set([".mp4", ".webm", ".ogg", ".mov", ".m4v"]);
+const DOCUMENT_TYPES = new Set([".pdf"]);
 const TRANSITIONS = new Set(["fade", "slide", "zoom", "none"]);
 const BACKGROUND_TYPES = new Set(["color", "gradient"]);
+const DOCUMENT_VIEWS = new Set(["fit-width", "fit-page", "actual-size"]);
 
 const defaultSettings = {
   imageDuration: 8,
@@ -114,11 +120,96 @@ function inferMediaType(filename) {
   const ext = path.extname(filename).toLowerCase();
   if (IMAGE_TYPES.has(ext)) return "image";
   if (VIDEO_TYPES.has(ext)) return "video";
+  if (DOCUMENT_TYPES.has(ext)) return "document";
   return null;
 }
 
 function mediaPublicUrl(filename) {
   return `/uploads/${encodeURIComponent(filename)}`;
+}
+
+function comparePageFilenames(a, b) {
+  const pageA = Number(path.basename(a, path.extname(a)).split("-").pop()) || 0;
+  const pageB = Number(path.basename(b, path.extname(b)).split("-").pop()) || 0;
+  return pageA - pageB;
+}
+
+async function convertPdfToImages(file) {
+  const pdfPath = path.join(UPLOAD_DIR, file.filename);
+  const outputPrefix = path.join(UPLOAD_DIR, `${path.basename(file.filename, path.extname(file.filename))}-page`);
+  const outputPrefixBase = path.basename(outputPrefix);
+
+  try {
+    await execFileAsync("pdftoppm", [
+      "-png",
+      "-r", "150",
+      pdfPath,
+      outputPrefix
+    ]);
+
+    const generatedFiles = (await fsp.readdir(UPLOAD_DIR))
+      .filter((entry) => entry.startsWith(`${outputPrefixBase}-`) && entry.endsWith(".png"))
+      .sort(comparePageFilenames);
+
+    if (!generatedFiles.length) {
+      throw new Error("PDF konnte nicht in Bilder umgewandelt werden.");
+    }
+
+    await fsp.rm(pdfPath, { force: true });
+    return generatedFiles;
+  } catch (error) {
+    const leftovers = (await fsp.readdir(UPLOAD_DIR))
+      .filter((entry) => entry.startsWith(`${outputPrefixBase}-`) && entry.endsWith(".png"));
+
+    await Promise.all(leftovers.map((entry) => fsp.rm(path.join(UPLOAD_DIR, entry), { force: true })));
+    await fsp.rm(pdfPath, { force: true });
+    throw error;
+  }
+}
+
+function normalizePositiveInteger(value, fallback, max = 100000) {
+  const normalized = Math.round(Number(value));
+  if (!Number.isFinite(normalized) || normalized < 1) return fallback;
+  return Math.min(normalized, max);
+}
+
+function normalizeNonNegativeInteger(value, fallback, max = 100000) {
+  const normalized = Math.round(Number(value));
+  if (!Number.isFinite(normalized) || normalized < 0) return fallback;
+  return Math.min(normalized, max);
+}
+
+function normalizeDocumentConfig(item = {}, input = {}) {
+  const view = DOCUMENT_VIEWS.has(input.documentView) ? input.documentView : (DOCUMENT_VIEWS.has(item.documentView) ? item.documentView : "fit-width");
+  const startPage = normalizePositiveInteger(input.documentStartPage ?? item.documentStartPage, 1);
+  const rawEndPage = normalizePositiveInteger(input.documentEndPage ?? item.documentEndPage, startPage);
+  const endPage = Math.max(startPage, rawEndPage);
+  const pageAdvanceSeconds = normalizeNonNegativeInteger(input.documentPageAdvanceSeconds ?? item.documentPageAdvanceSeconds, 0, 3600);
+  const durationSeconds = normalizePositiveInteger(input.durationSeconds ?? item.durationSeconds, 8, 3600);
+
+  return {
+    documentView: view,
+    documentStartPage: startPage,
+    documentEndPage: endPage,
+    documentPageAdvanceSeconds: pageAdvanceSeconds,
+    durationSeconds
+  };
+}
+
+function getItemDurationSeconds(item, settings) {
+  if (item.type === "video") {
+    return Math.max(1, Number(item.durationSeconds || 15));
+  }
+
+  if (item.type === "document") {
+    const config = normalizeDocumentConfig(item, {});
+    if (config.documentPageAdvanceSeconds > 0) {
+      return Math.max(1, (config.documentEndPage - config.documentStartPage + 1) * config.documentPageAdvanceSeconds);
+    }
+    return Math.max(1, config.durationSeconds || settings.imageDuration);
+  }
+
+  return Math.max(1, Number(settings.imageDuration || 8));
 }
 
 async function getMedia() {
@@ -202,7 +293,7 @@ async function buildPlaybackSnapshot() {
 
   const cycle = [];
   for (const item of playlist) {
-    const durationSeconds = item.type === "video" ? Number(item.durationSeconds || 15) : settings.imageDuration;
+    const durationSeconds = getItemDurationSeconds(item, settings);
     cycle.push(Math.max(1, durationSeconds) * 1000);
   }
 
@@ -233,7 +324,10 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 1024 * 1024 * 250 },
+  limits: {
+    fileSize: 1024 * 1024 * 250,
+    files: 100
+  },
   fileFilter: (_req, file, cb) => {
     const type = inferMediaType(file.originalname);
     if (!type) {
@@ -306,7 +400,7 @@ app.get("/api/media", async (_req, res) => {
   res.json(media.map((item) => ({ ...item, url: mediaPublicUrl(item.filename) })));
 });
 
-app.post("/api/media", requireAuth, upload.array("files", 50), async (req, res) => {
+app.post("/api/media", requireAuth, upload.array("files", 100), async (req, res) => {
   const files = req.files || [];
   const media = await getMedia();
   let metadata = {};
@@ -321,6 +415,32 @@ app.post("/api/media", requireAuth, upload.array("files", 50), async (req, res) 
     const type = inferMediaType(file.originalname || file.filename);
     if (!type) continue;
     const perFileMetadata = metadata[file.originalname] || {};
+
+    if (type === "document") {
+      const generatedFiles = await convertPdfToImages(file);
+      const baseName = path.basename(file.originalname, path.extname(file.originalname));
+
+      for (let pageIndex = 0; pageIndex < generatedFiles.length; pageIndex += 1) {
+        media.push({
+          id: crypto.randomUUID(),
+          type: "image",
+          filename: generatedFiles[pageIndex],
+          originalName: `${baseName} - Seite ${pageIndex + 1}`,
+          order,
+          enabled: true,
+          rotation: 0,
+          durationSeconds: null,
+          documentView: null,
+          documentStartPage: null,
+          documentEndPage: null,
+          documentPageAdvanceSeconds: null,
+          createdAt: new Date().toISOString()
+        });
+        order += 1;
+      }
+      continue;
+    }
+
     media.push({
       id: crypto.randomUUID(),
       type,
@@ -329,7 +449,11 @@ app.post("/api/media", requireAuth, upload.array("files", 50), async (req, res) 
       order,
       enabled: true,
       rotation: 0,
-      durationSeconds: type === "video" ? Math.max(1, Number(perFileMetadata.durationSeconds || 15)) : null,
+      durationSeconds: type === "video" ? Math.max(1, Number(perFileMetadata.durationSeconds || 15)) : (type === "document" ? 8 : null),
+      documentView: type === "document" ? "fit-width" : null,
+      documentStartPage: type === "document" ? 1 : null,
+      documentEndPage: type === "document" ? 1 : null,
+      documentPageAdvanceSeconds: type === "document" ? 0 : null,
       createdAt: new Date().toISOString()
     });
     order += 1;
@@ -358,6 +482,9 @@ app.patch("/api/media/:id", requireAuth, async (req, res) => {
   }
   if (item.type === "video" && typeof req.body?.durationSeconds === "number" && Number.isFinite(req.body.durationSeconds)) {
     item.durationSeconds = Math.max(1, req.body.durationSeconds);
+  }
+  if (item.type === "document") {
+    Object.assign(item, normalizeDocumentConfig(item, req.body || {}));
   }
   if (typeof order === "number" && Number.isFinite(order)) {
     const target = Math.max(0, Math.min(media.length - 1, Math.round(order)));
@@ -409,6 +536,17 @@ app.delete("/api/media/:id", requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+app.delete("/api/media", requireAuth, async (_req, res) => {
+  const media = await getMedia();
+  await saveMedia([]);
+
+  await Promise.all(
+    media.map((item) => fsp.rm(path.join(UPLOAD_DIR, item.filename), { force: true }))
+  );
+
+  res.json({ ok: true, deleted: media.length });
+});
+
 app.get("/api/playback", async (_req, res) => {
   const snapshot = await buildPlaybackSnapshot();
   res.json({
@@ -420,6 +558,14 @@ app.get("/api/playback", async (_req, res) => {
 
 app.use((err, _req, res, _next) => {
   if (err instanceof multer.MulterError) {
+    if (err.code === "LIMIT_FILE_SIZE") {
+      res.status(400).json({ error: "Eine Datei ist zu gross. Maximal 250 MB pro Datei sind erlaubt." });
+      return;
+    }
+    if (err.code === "LIMIT_FILE_COUNT") {
+      res.status(400).json({ error: "Zu viele Dateien in einem Upload-Paket. Bitte kleinere Pakete verwenden." });
+      return;
+    }
     res.status(400).json({ error: err.message });
     return;
   }

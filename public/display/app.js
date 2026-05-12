@@ -6,10 +6,17 @@ const state = {
   playlist: [],
   settings: null,
   currentIndex: 0,
-  timerId: null,
+  timerIds: [],
   pollId: null,
   currentRenderedId: null
 };
+
+function clearTimers() {
+  for (const timerId of state.timerIds) {
+    clearTimeout(timerId);
+  }
+  state.timerIds = [];
+}
 
 function clearStage() {
   stage.innerHTML = "";
@@ -26,6 +33,38 @@ function applyTransition(transition) {
   displayRoot.className = `display-root transition-${transitionName} video-fit-${videoFit}`;
 }
 
+function getDocumentConfig(item) {
+  const startPage = Math.max(1, Number(item.documentStartPage || 1));
+  const endPage = Math.max(startPage, Number(item.documentEndPage || startPage));
+  const pageAdvanceSeconds = Math.max(0, Number(item.documentPageAdvanceSeconds || 0));
+  const durationSeconds = Math.max(1, Number(item.durationSeconds || state.settings?.imageDuration || 8));
+  const view = item.documentView || "fit-width";
+  return { startPage, endPage, pageAdvanceSeconds, durationSeconds, view };
+}
+
+function buildPdfUrl(item, page) {
+  const config = getDocumentConfig(item);
+  const zoom = config.view === "fit-page"
+    ? "page-fit"
+    : (config.view === "actual-size" ? "100" : "page-width");
+  const params = new URLSearchParams({
+    toolbar: "0",
+    navpanes: "0",
+    scrollbar: "0",
+    page: String(page),
+    zoom
+  });
+  return `${item.url}#${params.toString()}`;
+}
+
+function getDocumentTotalDurationMs(item) {
+  const config = getDocumentConfig(item);
+  if (config.pageAdvanceSeconds > 0) {
+    return (config.endPage - config.startPage + 1) * config.pageAdvanceSeconds * 1000;
+  }
+  return config.durationSeconds * 1000;
+}
+
 function createMediaNode(item) {
   const shell = document.createElement("div");
   shell.className = "media-shell";
@@ -39,6 +78,16 @@ function createMediaNode(item) {
     image.src = item.url;
     image.alt = item.originalName || "Bild";
     frame.appendChild(image);
+    shell.appendChild(frame);
+    return { shell, done: null };
+  }
+
+  if (item.type === "document") {
+    const pdf = document.createElement("iframe");
+    pdf.src = buildPdfUrl(item, getDocumentConfig(item).startPage);
+    pdf.title = item.originalName || "PDF";
+    pdf.loading = "eager";
+    frame.appendChild(pdf);
     shell.appendChild(frame);
     return { shell, done: null };
   }
@@ -61,7 +110,7 @@ function createMediaNode(item) {
 }
 
 async function showItem(item) {
-  clearTimeout(state.timerId);
+  clearTimers();
   clearStage();
   state.currentRenderedId = item.id;
 
@@ -71,9 +120,29 @@ async function showItem(item) {
 
   if (item.type === "image") {
     const duration = Math.max(1, Number(state.settings?.imageDuration || 8)) * 1000;
-    state.timerId = window.setTimeout(() => {
+    state.timerIds.push(window.setTimeout(() => {
       advanceIndependent();
-    }, duration);
+    }, duration));
+    return;
+  }
+
+  if (item.type === "document") {
+    const config = getDocumentConfig(item);
+    const pdf = shell.querySelector("iframe");
+
+    if (config.pageAdvanceSeconds > 0 && config.endPage > config.startPage) {
+      for (let page = config.startPage + 1; page <= config.endPage; page += 1) {
+        const delay = (page - config.startPage) * config.pageAdvanceSeconds * 1000;
+        state.timerIds.push(window.setTimeout(() => {
+          if (state.currentRenderedId !== item.id || !pdf) return;
+          pdf.src = buildPdfUrl(item, page);
+        }, delay));
+      }
+    }
+
+    state.timerIds.push(window.setTimeout(() => {
+      advanceIndependent();
+    }, getDocumentTotalDurationMs(item)));
     return;
   }
 
@@ -103,7 +172,7 @@ async function renderSync(snapshot) {
   }
 
   emptyState.classList.add("hidden");
-  clearTimeout(state.timerId);
+  clearTimers();
 
   if (state.currentRenderedId !== item.id || !stage.children.length) {
     clearStage();
@@ -131,13 +200,32 @@ async function renderSync(snapshot) {
     return;
   }
 
-  const activeImage = stage.querySelector("img");
-  if (!activeImage || state.currentRenderedId !== item.id) {
+  const activeVisual = stage.querySelector("img, iframe");
+  if (!activeVisual || state.currentRenderedId !== item.id) {
     clearStage();
     const { shell } = createMediaNode(item);
     stage.appendChild(shell);
     state.currentRenderedId = item.id;
     requestAnimationFrame(() => shell.classList.add("active"));
+  }
+
+  if (item.type === "document") {
+    const pdf = stage.querySelector("iframe");
+    if (!pdf) return;
+    const config = getDocumentConfig(item);
+    let currentPage = config.startPage;
+    if (config.pageAdvanceSeconds > 0) {
+      const elapsedSeconds = Math.max(0, (Date.now() - snapshot.startedAt) / 1000);
+      const pageOffset = Math.min(
+        config.endPage - config.startPage,
+        Math.floor(elapsedSeconds / config.pageAdvanceSeconds)
+      );
+      currentPage = config.startPage + pageOffset;
+    }
+    const nextSrc = buildPdfUrl(item, currentPage);
+    if (pdf.getAttribute("src") !== nextSrc) {
+      pdf.src = nextSrc;
+    }
   }
 }
 
@@ -165,7 +253,7 @@ async function refresh() {
 
   if (!snapshot.playlist.length) {
     state.playlist = [];
-    clearTimeout(state.timerId);
+    clearTimers();
     clearStage();
     state.currentRenderedId = null;
     emptyState.classList.remove("hidden");

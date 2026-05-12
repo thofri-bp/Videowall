@@ -7,6 +7,17 @@
     <link rel="stylesheet" href="/static/admin/styles.css">
   </head>
   <body>
+    <div id="uploadOverlay" class="upload-overlay hidden" aria-live="polite" aria-hidden="true">
+      <div class="upload-overlay-card">
+        <div class="upload-spinner" aria-hidden="true"></div>
+        <h2>Upload läuft</h2>
+        <p id="uploadOverlayStatus">Dateien werden vorbereitet…</p>
+        <div class="upload-progress" aria-hidden="true">
+          <div id="uploadProgressBar" class="upload-progress-bar"></div>
+        </div>
+      </div>
+    </div>
+
     <main class="page">
       <section id="loginCard" class="card login-card">
         <h1>VideoWall Admin</h1>
@@ -47,10 +58,10 @@
           <article class="card">
             <h2>Upload</h2>
             <form id="uploadForm" class="stack">
-              <input id="filesInput" name="files" type="file" accept="image/*,video/*" multiple required>
+              <input id="filesInput" name="files" type="file" accept="image/*,video/*,.pdf,application/pdf" multiple required>
               <button type="submit">Dateien hochladen</button>
             </form>
-            <p class="hint">Unterstützt Bilder und Videos. Uploads bleiben nach Neustarts erhalten.</p>
+            <p class="hint">Unterstützt Bilder, Videos und PDFs. PDFs werden beim Upload automatisch in einzelne Bildseiten umgewandelt.</p>
             <p id="uploadMessage" class="message"></p>
           </article>
 
@@ -113,7 +124,10 @@
               <h2>Playlist</h2>
               <p class="hint">Per Drag & Drop sortieren, Sichtbarkeit umschalten, Rotation setzen oder löschen.</p>
             </div>
-            <button id="refreshButton" class="secondary" type="button">Aktualisieren</button>
+            <div class="row-actions">
+              <button id="clearAllButton" class="danger" type="button">Alles löschen</button>
+              <button id="refreshButton" class="secondary" type="button">Aktualisieren</button>
+            </div>
           </div>
           <ul id="mediaList" class="media-list"></ul>
           <p id="emptyState" class="hint hidden">Noch keine Medien vorhanden.</p>
