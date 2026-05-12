@@ -96,6 +96,13 @@ chmod +x deploy.sh
 ADMIN_PASSWORD=mein-passwort ./deploy.sh
 ```
 
+Update von GitHub holen und direkt neu ausrollen:
+
+```bash
+chmod +x update.sh
+./update.sh
+```
+
 Sauber stoppen:
 
 ```bash
@@ -128,3 +135,4 @@ Das ist robuster bei Updates, Rebuilds und Container-Neustarts.
 
 Falls du noch Daten im alten lokalen Ordner `./data` hast, migriert `./deploy.sh` sie beim ersten Deploy automatisch in das Volume, sofern das Volume noch leer ist.
 Falls bereits ein passendes Daten-Volume aus einer aelteren Version existiert, verwendet `./deploy.sh` dieses automatisch weiter.
+`./update.sh` zieht den neuesten Stand per Git, prueft auf lokale Aenderungen und startet danach automatisch `./deploy.sh`.

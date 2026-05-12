@@ -29,9 +29,9 @@ else
 fi
 
 if [[ -z "${ADMIN_PASSWORD:-}" ]]; then
-  echo "Fehler: Bitte ADMIN_PASSWORD setzen."
-  echo "Beispiel: ADMIN_PASSWORD='mein-passwort' ./deploy.sh"
-  exit 1
+  echo "Hinweis: ADMIN_PASSWORD ist nicht gesetzt."
+  echo "Bei einer Erstinstallation wird dann das Standardpasswort 'videowall-admin' gespeichert."
+  echo "Bei bestehenden Installationen bleibt das bereits gespeicherte Passwort erhalten."
 fi
 
 DATA_VOLUME_DEFAULT_NAME="videowall_data"
