@@ -27,7 +27,7 @@ Fuer Zugriff aus dem lokalen Netzwerk den Host explizit setzen:
 - PDFs werden beim Upload automatisch in Bildseiten umgewandelt
 - Reihenfolge per Drag & Drop aendern
 - Sichtbarkeit ein-/ausschalten
-- Rotation pro Medium setzen
+- Rotation, Position, Anzeigeart und Skalierung pro Bild/Video setzen
 - Hintergrund, Bilddauer, Uebergaenge und Synchronmodus verwalten
 - Speicherung in `data/uploads` und `data/state`
 
@@ -96,6 +96,13 @@ chmod +x deploy.sh
 ADMIN_PASSWORD=mein-passwort ./deploy.sh
 ```
 
+Sauber stoppen:
+
+```bash
+chmod +x stop.sh
+./stop.sh
+```
+
 Passwort spaeter bewusst aendern:
 
 ```bash
@@ -120,3 +127,4 @@ Die Daten bleiben in einem Docker-Volume `videowall_data` persistent erhalten.
 Das ist robuster bei Updates, Rebuilds und Container-Neustarts.
 
 Falls du noch Daten im alten lokalen Ordner `./data` hast, migriert `./deploy.sh` sie beim ersten Deploy automatisch in das Volume, sofern das Volume noch leer ist.
+Falls bereits ein passendes Daten-Volume aus einer aelteren Version existiert, verwendet `./deploy.sh` dieses automatisch weiter.

@@ -125,9 +125,24 @@ function renderMedia() {
             <label>
               Anzeige
               <select class="display-fit-select mini">
-                <option value="contain" ${item.displayFit === "contain" ? "selected" : ""}>Komplett sichtbar</option>
-                <option value="cover" ${item.displayFit === "cover" ? "selected" : ""}>Bildschirmfüllend</option>
+                <option value="max" ${(!item.displayFit || item.displayFit === "max" || item.displayFit === "contain") ? "selected" : ""}>Maximal ohne Rand</option>
+                <option value="cover" ${item.displayFit === "cover" ? "selected" : ""}>Füllend</option>
                 <option value="stretch" ${item.displayFit === "stretch" ? "selected" : ""}>Strecken</option>
+                <option value="original" ${item.displayFit === "original" ? "selected" : ""}>Originalgröße</option>
+              </select>
+            </label>
+            <label>
+              Position
+              <select class="display-position-select mini">
+                <option value="center" ${item.displayPosition === "center" ? "selected" : ""}>Mitte</option>
+                <option value="top" ${item.displayPosition === "top" ? "selected" : ""}>Oben</option>
+                <option value="bottom" ${item.displayPosition === "bottom" ? "selected" : ""}>Unten</option>
+                <option value="left" ${item.displayPosition === "left" ? "selected" : ""}>Links</option>
+                <option value="right" ${item.displayPosition === "right" ? "selected" : ""}>Rechts</option>
+                <option value="top-left" ${item.displayPosition === "top-left" ? "selected" : ""}>Oben links</option>
+                <option value="top-right" ${item.displayPosition === "top-right" ? "selected" : ""}>Oben rechts</option>
+                <option value="bottom-left" ${item.displayPosition === "bottom-left" ? "selected" : ""}>Unten links</option>
+                <option value="bottom-right" ${item.displayPosition === "bottom-right" ? "selected" : ""}>Unten rechts</option>
               </select>
             </label>
             <label>
@@ -135,12 +150,16 @@ function renderMedia() {
               <input class="display-scale mini-input" type="number" min="10" max="400" value="${item.displayScalePercent || 100}">
             </label>
             ${item.type === "video" ? `
+              <label class="checkbox-row">
+                <input class="video-show-complete" type="checkbox" ${item.videoShowComplete ? "checked" : ""}>
+                <span>Komplett anzeigen</span>
+              </label>
               <label>
                 Videodauer
                 <input class="video-duration mini-input" type="number" min="1" max="3600" value="${item.durationSeconds || 15}">
               </label>
             ` : ""}
-            <p class="hint">Skalierung wirkt zusätzlich zur gewählten Anzeigeart.</p>
+            <p class="hint">` + (item.type === "video" ? "Bei aktiviertem Haken wird das Video komplett sichtbar gehalten." : "Skalierung wirkt zusätzlich zur gewählten Anzeigeart.") + `</p>
           </div>
         ` : ""}
         ${item.type === "document" ? `
@@ -200,17 +219,21 @@ function renderMedia() {
       const saveDisplaySettings = async () => {
         const payload = {
           displayFit: li.querySelector(".display-fit-select").value,
+          displayPosition: li.querySelector(".display-position-select").value,
           displayScalePercent: Number(li.querySelector(".display-scale").value)
         };
         if (item.type === "video") {
+          payload.videoShowComplete = li.querySelector(".video-show-complete").checked;
           payload.durationSeconds = Number(li.querySelector(".video-duration").value);
         }
         await updateMedia(item.id, payload);
       };
 
       li.querySelector(".display-fit-select").addEventListener("change", saveDisplaySettings);
+      li.querySelector(".display-position-select").addEventListener("change", saveDisplaySettings);
       li.querySelector(".display-scale").addEventListener("change", saveDisplaySettings);
       if (item.type === "video") {
+        li.querySelector(".video-show-complete").addEventListener("change", saveDisplaySettings);
         li.querySelector(".video-duration").addEventListener("change", saveDisplaySettings);
       }
     }

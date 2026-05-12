@@ -356,6 +356,18 @@ body.overlay-active {
   font-size: 0.9rem;
 }
 
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+}
+
+.checkbox-row input {
+  width: auto;
+  margin: 0;
+}
+
 .mini-input,
 .document-settings .mini {
   min-width: 0;

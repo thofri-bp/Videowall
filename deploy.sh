@@ -34,7 +34,32 @@ if [[ -z "${ADMIN_PASSWORD:-}" ]]; then
   exit 1
 fi
 
-DATA_VOLUME_NAME="videowall_data"
+DATA_VOLUME_DEFAULT_NAME="videowall_data"
+
+detect_existing_data_volume() {
+  local volume_name
+
+  if docker volume inspect "$DATA_VOLUME_DEFAULT_NAME" >/dev/null 2>&1; then
+    echo "$DATA_VOLUME_DEFAULT_NAME"
+    return
+  fi
+
+  while IFS= read -r volume_name; do
+    if [[ "$volume_name" == *_videowall_data ]]; then
+      echo "$volume_name"
+      return
+    fi
+  done < <(docker volume ls --format '{{.Name}}')
+
+  echo "$DATA_VOLUME_DEFAULT_NAME"
+}
+
+DATA_VOLUME_NAME="${DATA_VOLUME_NAME:-$(detect_existing_data_volume)}"
+export DATA_VOLUME_NAME
+
+if [[ "$DATA_VOLUME_NAME" != "$DATA_VOLUME_DEFAULT_NAME" ]]; then
+  echo "Verwende bestehendes Daten-Volume aus einer älteren Version: $DATA_VOLUME_NAME"
+fi
 
 echo "Starte VideoWall-Deployment..."
 "${COMPOSE_CMD[@]}" down --remove-orphans

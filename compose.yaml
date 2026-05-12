@@ -17,4 +17,4 @@ services:
 
 volumes:
   videowall_data:
-    name: videowall_data
+    name: ${DATA_VOLUME_NAME:-videowall_data}

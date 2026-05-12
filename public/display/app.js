@@ -65,10 +65,60 @@ function getDocumentTotalDurationMs(item) {
 }
 
 function getDisplayConfig(item) {
+  const baseFit = item.displayFit || (item.type === "video" ? (state.settings?.videoFit || "max") : "max");
+  const normalizedFit = baseFit === "contain" ? "max" : baseFit;
+  const effectiveFit = item.type === "video" && item.videoShowComplete ? "max" : normalizedFit;
   return {
-    fit: item.displayFit || (item.type === "video" ? (state.settings?.videoFit || "contain") : "contain"),
-    scalePercent: Math.max(10, Number(item.displayScalePercent || 100))
+    fit: effectiveFit,
+    scalePercent: Math.max(10, Number(item.displayScalePercent || 100)),
+    position: item.displayPosition || "center"
   };
+}
+
+function getObjectPosition(position) {
+  switch (position) {
+    case "top":
+      return "center top";
+    case "bottom":
+      return "center bottom";
+    case "left":
+      return "left center";
+    case "right":
+      return "right center";
+    case "top-left":
+      return "left top";
+    case "top-right":
+      return "right top";
+    case "bottom-left":
+      return "left bottom";
+    case "bottom-right":
+      return "right bottom";
+    default:
+      return "center center";
+  }
+}
+
+function getPlaceSelf(position) {
+  switch (position) {
+    case "top":
+      return "start center";
+    case "bottom":
+      return "end center";
+    case "left":
+      return "center start";
+    case "right":
+      return "center end";
+    case "top-left":
+      return "start start";
+    case "top-right":
+      return "start end";
+    case "bottom-left":
+      return "end start";
+    case "bottom-right":
+      return "end end";
+    default:
+      return "center center";
+  }
 }
 
 function createMediaNode(item) {
@@ -84,6 +134,8 @@ function createMediaNode(item) {
   if (item.type === "image") {
     const image = document.createElement("img");
     image.className = `media-visual fit-${displayConfig.fit}`;
+    image.style.objectPosition = getObjectPosition(displayConfig.position);
+    image.style.placeSelf = getPlaceSelf(displayConfig.position);
     image.src = item.url;
     image.alt = item.originalName || "Bild";
     frame.appendChild(image);
@@ -103,6 +155,8 @@ function createMediaNode(item) {
 
   const video = document.createElement("video");
   video.className = `media-visual fit-${displayConfig.fit}`;
+  video.style.objectPosition = getObjectPosition(displayConfig.position);
+  video.style.placeSelf = getPlaceSelf(displayConfig.position);
   video.src = item.url;
   video.autoplay = true;
   video.muted = true;

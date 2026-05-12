@@ -29,7 +29,8 @@ const DOCUMENT_TYPES = new Set([".pdf"]);
 const TRANSITIONS = new Set(["fade", "slide", "zoom", "none"]);
 const BACKGROUND_TYPES = new Set(["color", "gradient"]);
 const DOCUMENT_VIEWS = new Set(["fit-width", "fit-page", "actual-size"]);
-const DISPLAY_FITS = new Set(["contain", "cover", "stretch"]);
+const DISPLAY_FITS = new Set(["max", "cover", "stretch", "original", "contain"]);
+const DISPLAY_POSITIONS = new Set(["center", "top", "bottom", "left", "right", "top-left", "top-right", "bottom-left", "bottom-right"]);
 
 const defaultSettings = {
   imageDuration: 8,
@@ -243,11 +244,18 @@ function normalizeDocumentConfig(item = {}, input = {}) {
 }
 
 function normalizeDisplayConfig(item = {}, input = {}) {
-  const displayFit = DISPLAY_FITS.has(input.displayFit) ? input.displayFit : (DISPLAY_FITS.has(item.displayFit) ? item.displayFit : "contain");
+  const rawDisplayFit = DISPLAY_FITS.has(input.displayFit) ? input.displayFit : (DISPLAY_FITS.has(item.displayFit) ? item.displayFit : "max");
+  const displayFit = rawDisplayFit === "contain" ? "max" : rawDisplayFit;
   const displayScalePercent = normalizePositiveInteger(input.displayScalePercent ?? item.displayScalePercent, 100, 400);
+  const displayPosition = DISPLAY_POSITIONS.has(input.displayPosition) ? input.displayPosition : (DISPLAY_POSITIONS.has(item.displayPosition) ? item.displayPosition : "center");
+  const videoShowComplete = typeof input.videoShowComplete === "boolean"
+    ? input.videoShowComplete
+    : Boolean(item.videoShowComplete);
   return {
     displayFit,
-    displayScalePercent
+    displayScalePercent,
+    displayPosition,
+    videoShowComplete
   };
 }
 
@@ -505,8 +513,10 @@ app.post("/api/media", requireAuth, upload.array("files", 100), async (req, res)
           order,
           enabled: true,
           rotation: 0,
-          displayFit: "contain",
+          displayFit: "max",
           displayScalePercent: 100,
+          displayPosition: "center",
+          videoShowComplete: false,
           durationSeconds: null,
           documentView: null,
           documentStartPage: null,
@@ -527,8 +537,10 @@ app.post("/api/media", requireAuth, upload.array("files", 100), async (req, res)
       order,
       enabled: true,
       rotation: 0,
-      displayFit: type === "image" || type === "video" ? "contain" : null,
+      displayFit: type === "image" || type === "video" ? "max" : null,
       displayScalePercent: type === "image" || type === "video" ? 100 : null,
+      displayPosition: type === "image" || type === "video" ? "center" : null,
+      videoShowComplete: type === "video" ? false : null,
       durationSeconds: type === "video" ? Math.max(1, Number(perFileMetadata.durationSeconds || 15)) : (type === "document" ? 8 : null),
       documentView: type === "document" ? "fit-width" : null,
       documentStartPage: type === "document" ? 1 : null,
