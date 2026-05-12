@@ -103,6 +103,10 @@ chmod +x update.sh
 ./update.sh
 ```
 
+Das Update-Skript erwartet dieses Repository als `origin`:
+
+`https://github.com/thofri-bp/Videowall.git`
+
 Sauber stoppen:
 
 ```bash

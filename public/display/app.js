@@ -67,12 +67,10 @@ function getDocumentTotalDurationMs(item) {
 function getDisplayConfig(item) {
   const baseFit = item.displayFit || (item.type === "video" ? (state.settings?.videoFit || "max") : "max");
   const normalizedFit = baseFit === "contain" ? "max" : baseFit;
-  const videoShowComplete = item.type === "video" && item.videoShowComplete;
-  const effectiveFit = videoShowComplete ? "max" : normalizedFit;
   const rawScalePercent = Math.max(10, Number(item.displayScalePercent || 100));
-  const effectiveScalePercent = (effectiveFit === "stretch" || videoShowComplete) ? 100 : rawScalePercent;
+  const effectiveScalePercent = normalizedFit === "stretch" ? 100 : rawScalePercent;
   return {
-    fit: effectiveFit,
+    fit: normalizedFit,
     scalePercent: effectiveScalePercent,
     position: item.displayPosition || "center"
   };
@@ -219,8 +217,23 @@ async function showItem(item) {
   } catch {
     // autoplay may be blocked; browser interaction can resume it later
   }
+  if (item.videoShowComplete) {
+    await done;
+    advanceIndependent();
+    return;
+  }
+
+  const configuredDurationMs = Math.max(1, Number(item.durationSeconds || 15)) * 1000;
+  let advanced = false;
+  const advanceOnce = () => {
+    if (advanced) return;
+    advanced = true;
+    advanceIndependent();
+  };
+
+  state.timerIds.push(window.setTimeout(advanceOnce, configuredDurationMs));
   await done;
-  advanceIndependent();
+  advanceOnce();
 }
 
 async function advanceIndependent() {

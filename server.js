@@ -261,6 +261,9 @@ function normalizeDisplayConfig(item = {}, input = {}) {
 
 function getItemDurationSeconds(item, settings) {
   if (item.type === "video") {
+    if (item.videoShowComplete) {
+      return Math.max(1, Number(item.videoActualDurationSeconds || item.durationSeconds || 15));
+    }
     return Math.max(1, Number(item.durationSeconds || 15));
   }
 
@@ -518,6 +521,7 @@ app.post("/api/media", requireAuth, upload.array("files", 100), async (req, res)
           displayPosition: "center",
           videoShowComplete: false,
           durationSeconds: null,
+          videoActualDurationSeconds: null,
           documentView: null,
           documentStartPage: null,
           documentEndPage: null,
@@ -542,6 +546,7 @@ app.post("/api/media", requireAuth, upload.array("files", 100), async (req, res)
       displayPosition: type === "image" || type === "video" ? "center" : null,
       videoShowComplete: type === "video" ? false : null,
       durationSeconds: type === "video" ? Math.max(1, Number(perFileMetadata.durationSeconds || 15)) : (type === "document" ? 8 : null),
+      videoActualDurationSeconds: type === "video" ? Math.max(1, Number(perFileMetadata.durationSeconds || 15)) : null,
       documentView: type === "document" ? "fit-width" : null,
       documentStartPage: type === "document" ? 1 : null,
       documentEndPage: type === "document" ? 1 : null,

@@ -99,7 +99,7 @@ function renderSettings() {
 
 function getDisplaySettingsHint({ fit, isVideo, showComplete }) {
   if (isVideo && showComplete) {
-    return "Komplett anzeigen ist aktiv. Das Video bleibt komplett sichtbar, daher sind Anzeigeart und Skalierung gesperrt.";
+    return "Video komplett abspielen ist aktiv. Die manuelle Videodauer ist gesperrt und das Video laeuft bis zum Ende durch.";
   }
   if (fit === "stretch") {
     return "Bei Strecken ist die Skalierung gesperrt, weil das Medium bereits auf die volle Fläche gezogen wird.";
@@ -119,14 +119,17 @@ function syncDisplayControlState(li, itemType) {
   const hint = li.querySelector(".display-settings-hint");
   const isVideo = itemType === "video";
   const showCompleteCheckbox = isVideo ? li.querySelector(".video-show-complete") : null;
+  const durationInput = isVideo ? li.querySelector(".video-duration") : null;
   const showComplete = Boolean(showCompleteCheckbox?.checked);
   const fit = fitSelect.value;
 
-  const disableFit = isVideo && showComplete;
-  const disableScale = fit === "stretch" || (isVideo && showComplete);
+  const disableScale = fit === "stretch";
 
-  fitSelect.disabled = disableFit;
+  fitSelect.disabled = false;
   scaleInput.disabled = disableScale;
+  if (durationInput) {
+    durationInput.disabled = showComplete;
+  }
 
   if (hint) {
     hint.textContent = getDisplaySettingsHint({ fit, isVideo, showComplete });
@@ -188,7 +191,7 @@ function renderMedia() {
             ${item.type === "video" ? `
               <label class="checkbox-row">
                 <input class="video-show-complete" type="checkbox" ${item.videoShowComplete ? "checked" : ""}>
-                <span>Komplett anzeigen</span>
+                <span>Video komplett abspielen</span>
               </label>
               <label>
                 Videodauer
