@@ -29,8 +29,7 @@ function applyBackground(background) {
 
 function applyTransition(transition) {
   const transitionName = transition || "fade";
-  const videoFit = state.settings?.videoFit || "contain";
-  displayRoot.className = `display-root transition-${transitionName} video-fit-${videoFit}`;
+  displayRoot.className = `display-root transition-${transitionName}`;
 }
 
 function getDocumentConfig(item) {
@@ -65,16 +64,26 @@ function getDocumentTotalDurationMs(item) {
   return config.durationSeconds * 1000;
 }
 
+function getDisplayConfig(item) {
+  return {
+    fit: item.displayFit || (item.type === "video" ? (state.settings?.videoFit || "contain") : "contain"),
+    scalePercent: Math.max(10, Number(item.displayScalePercent || 100))
+  };
+}
+
 function createMediaNode(item) {
   const shell = document.createElement("div");
   shell.className = "media-shell";
   const frame = document.createElement("div");
   frame.className = "media-frame";
   const rotation = Number(item.rotation || 0);
-  frame.style.transform = `rotate(${rotation}deg)`;
+  const displayConfig = getDisplayConfig(item);
+  frame.style.setProperty("--media-scale", `${displayConfig.scalePercent / 100}`);
+  frame.style.transform = `rotate(${rotation}deg) scale(var(--media-scale))`;
 
   if (item.type === "image") {
     const image = document.createElement("img");
+    image.className = `media-visual fit-${displayConfig.fit}`;
     image.src = item.url;
     image.alt = item.originalName || "Bild";
     frame.appendChild(image);
@@ -93,6 +102,7 @@ function createMediaNode(item) {
   }
 
   const video = document.createElement("video");
+  video.className = `media-visual fit-${displayConfig.fit}`;
   video.src = item.url;
   video.autoplay = true;
   video.muted = true;

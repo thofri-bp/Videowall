@@ -15,6 +15,8 @@ const uploadOverlayStatus = document.getElementById("uploadOverlayStatus");
 const uploadProgressBar = document.getElementById("uploadProgressBar");
 const settingsForm = document.getElementById("settingsForm");
 const settingsMessage = document.getElementById("settingsMessage");
+const passwordForm = document.getElementById("passwordForm");
+const passwordMessage = document.getElementById("passwordMessage");
 const mediaList = document.getElementById("mediaList");
 const emptyState = document.getElementById("emptyState");
 const clearAllButton = document.getElementById("clearAllButton");
@@ -118,6 +120,29 @@ function renderMedia() {
         <h3>${item.originalName}</h3>
         <p>Typ: ${item.type} · Rotation: ${item.rotation}° · ${item.enabled ? "sichtbar" : "ausgeblendet"}</p>
         <p>Datei: ${item.filename}</p>
+        ${item.type === "image" || item.type === "video" ? `
+          <div class="document-settings">
+            <label>
+              Anzeige
+              <select class="display-fit-select mini">
+                <option value="contain" ${item.displayFit === "contain" ? "selected" : ""}>Komplett sichtbar</option>
+                <option value="cover" ${item.displayFit === "cover" ? "selected" : ""}>Bildschirmfüllend</option>
+                <option value="stretch" ${item.displayFit === "stretch" ? "selected" : ""}>Strecken</option>
+              </select>
+            </label>
+            <label>
+              Skalierung %
+              <input class="display-scale mini-input" type="number" min="10" max="400" value="${item.displayScalePercent || 100}">
+            </label>
+            ${item.type === "video" ? `
+              <label>
+                Videodauer
+                <input class="video-duration mini-input" type="number" min="1" max="3600" value="${item.durationSeconds || 15}">
+              </label>
+            ` : ""}
+            <p class="hint">Skalierung wirkt zusätzlich zur gewählten Anzeigeart.</p>
+          </div>
+        ` : ""}
         ${item.type === "document" ? `
           <div class="document-settings">
             <label>
@@ -170,6 +195,25 @@ function renderMedia() {
     li.querySelector(".rotation-select").addEventListener("change", async (event) => {
       await updateMedia(item.id, { rotation: Number(event.target.value) });
     });
+
+    if (item.type === "image" || item.type === "video") {
+      const saveDisplaySettings = async () => {
+        const payload = {
+          displayFit: li.querySelector(".display-fit-select").value,
+          displayScalePercent: Number(li.querySelector(".display-scale").value)
+        };
+        if (item.type === "video") {
+          payload.durationSeconds = Number(li.querySelector(".video-duration").value);
+        }
+        await updateMedia(item.id, payload);
+      };
+
+      li.querySelector(".display-fit-select").addEventListener("change", saveDisplaySettings);
+      li.querySelector(".display-scale").addEventListener("change", saveDisplaySettings);
+      if (item.type === "video") {
+        li.querySelector(".video-duration").addEventListener("change", saveDisplaySettings);
+      }
+    }
 
     if (item.type === "document") {
       const saveDocumentSettings = async () => {
@@ -437,6 +481,36 @@ settingsForm.addEventListener("submit", async (event) => {
     setMessage(settingsMessage, "Einstellungen gespeichert.");
   } catch (error) {
     setMessage(settingsMessage, error.message, true);
+  }
+});
+
+passwordForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setMessage(passwordMessage, "");
+
+  const currentPassword = document.getElementById("currentPasswordInput").value;
+  const newPassword = document.getElementById("newPasswordInput").value;
+  const confirmPassword = document.getElementById("confirmPasswordInput").value;
+
+  if (newPassword !== confirmPassword) {
+    setMessage(passwordMessage, "Die neuen Passwörter stimmen nicht überein.", true);
+    return;
+  }
+
+  if (newPassword.length < 6) {
+    setMessage(passwordMessage, "Das neue Passwort muss mindestens 6 Zeichen lang sein.", true);
+    return;
+  }
+
+  try {
+    await fetchJson("/api/admin/password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword })
+    });
+    passwordForm.reset();
+    setMessage(passwordMessage, "Passwort erfolgreich geändert.");
+  } catch (error) {
+    setMessage(passwordMessage, error.message, true);
   }
 });
 

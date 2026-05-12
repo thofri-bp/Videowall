@@ -18,6 +18,7 @@ Fuer Zugriff aus dem lokalen Netzwerk den Host explizit setzen:
 - Passwort: `videowall-admin`
 - Optional beim ersten Start per Umgebungsvariable setzen: `ADMIN_PASSWORD=mein-passwort npm start`
 - Das Passwort wird danach persistent in `data/state/admin.json` gespeichert
+- Das Passwort kann später direkt in der Admin-Weboberfläche geändert werden
 - Ein spaeteres Ueberschreiben per Umgebungsvariable passiert nur mit `ADMIN_PASSWORD_FORCE_UPDATE=1`
 
 ## Funktionen

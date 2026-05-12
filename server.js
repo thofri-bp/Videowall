@@ -29,6 +29,7 @@ const DOCUMENT_TYPES = new Set([".pdf"]);
 const TRANSITIONS = new Set(["fade", "slide", "zoom", "none"]);
 const BACKGROUND_TYPES = new Set(["color", "gradient"]);
 const DOCUMENT_VIEWS = new Set(["fit-width", "fit-page", "actual-size"]);
+const DISPLAY_FITS = new Set(["contain", "cover", "stretch"]);
 
 const defaultSettings = {
   imageDuration: 8,
@@ -241,6 +242,15 @@ function normalizeDocumentConfig(item = {}, input = {}) {
   };
 }
 
+function normalizeDisplayConfig(item = {}, input = {}) {
+  const displayFit = DISPLAY_FITS.has(input.displayFit) ? input.displayFit : (DISPLAY_FITS.has(item.displayFit) ? item.displayFit : "contain");
+  const displayScalePercent = normalizePositiveInteger(input.displayScalePercent ?? item.displayScalePercent, 100, 400);
+  return {
+    displayFit,
+    displayScalePercent
+  };
+}
+
 function getItemDurationSeconds(item, settings) {
   if (item.type === "video") {
     return Math.max(1, Number(item.durationSeconds || 15));
@@ -430,6 +440,27 @@ app.post("/api/logout", requireAuth, (_req, res) => {
   res.json({ ok: true });
 });
 
+app.post("/api/admin/password", requireAuth, async (req, res) => {
+  const { currentPassword, newPassword } = req.body || {};
+
+  if (!verifyPassword(currentPassword || "", adminState)) {
+    res.status(400).json({ error: "Aktuelles Passwort ist falsch." });
+    return;
+  }
+
+  if (typeof newPassword !== "string" || newPassword.length < 6) {
+    res.status(400).json({ error: "Das neue Passwort muss mindestens 6 Zeichen lang sein." });
+    return;
+  }
+
+  adminState = {
+    ...hashPassword(newPassword),
+    updatedAt: new Date().toISOString()
+  };
+  await writeJson(ADMIN_FILE, adminState);
+  res.json({ ok: true });
+});
+
 app.get("/api/settings", async (_req, res) => {
   const settings = await getSettings();
   res.json(settings);
@@ -474,6 +505,8 @@ app.post("/api/media", requireAuth, upload.array("files", 100), async (req, res)
           order,
           enabled: true,
           rotation: 0,
+          displayFit: "contain",
+          displayScalePercent: 100,
           durationSeconds: null,
           documentView: null,
           documentStartPage: null,
@@ -494,6 +527,8 @@ app.post("/api/media", requireAuth, upload.array("files", 100), async (req, res)
       order,
       enabled: true,
       rotation: 0,
+      displayFit: type === "image" || type === "video" ? "contain" : null,
+      displayScalePercent: type === "image" || type === "video" ? 100 : null,
       durationSeconds: type === "video" ? Math.max(1, Number(perFileMetadata.durationSeconds || 15)) : (type === "document" ? 8 : null),
       documentView: type === "document" ? "fit-width" : null,
       documentStartPage: type === "document" ? 1 : null,
@@ -524,6 +559,9 @@ app.patch("/api/media/:id", requireAuth, async (req, res) => {
   if (typeof rotation === "number" && Number.isFinite(rotation)) {
     const normalized = ((Math.round(rotation) % 360) + 360) % 360;
     item.rotation = normalized;
+  }
+  if (item.type === "image" || item.type === "video") {
+    Object.assign(item, normalizeDisplayConfig(item, req.body || {}));
   }
   if (item.type === "video" && typeof req.body?.durationSeconds === "number" && Number.isFinite(req.body.durationSeconds)) {
     item.durationSeconds = Math.max(1, req.body.durationSeconds);

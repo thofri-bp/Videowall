@@ -98,6 +98,7 @@
                   <option value="cover">Bildschirmfüllend</option>
                 </select>
               </label>
+              <p class="hint">Diese Video-Anzeige dient als Fallback. Pro Datei kannst du weiter unten eigene Anzeigearten setzen.</p>
 
               <label>
                 Hintergrundtyp
@@ -115,6 +116,30 @@
               <button type="submit">Einstellungen speichern</button>
             </form>
             <p id="settingsMessage" class="message"></p>
+          </article>
+
+          <article class="card">
+            <h2>Admin-Passwort</h2>
+            <form id="passwordForm" class="stack">
+              <label>
+                Aktuelles Passwort
+                <input id="currentPasswordInput" name="currentPassword" type="password" required>
+              </label>
+
+              <label>
+                Neues Passwort
+                <input id="newPasswordInput" name="newPassword" type="password" minlength="6" required>
+              </label>
+
+              <label>
+                Neues Passwort wiederholen
+                <input id="confirmPasswordInput" name="confirmPassword" type="password" minlength="6" required>
+              </label>
+
+              <button type="submit">Passwort ändern</button>
+            </form>
+            <p class="hint">Das Passwort wird persistent im Datenvolume gespeichert.</p>
+            <p id="passwordMessage" class="message"></p>
           </article>
         </section>
 

@@ -41,11 +41,12 @@ body {
 }
 
 .media-frame {
-  width: 100%;
-  height: 100%;
+  width: calc(100% - 32px);
+  height: calc(100% - 32px);
   display: grid;
   place-items: center;
   transform-origin: center center;
+  overflow: hidden;
 }
 
 .media-shell.active {
@@ -55,15 +56,25 @@ body {
 .media-shell img,
 .media-shell video,
 .media-shell iframe {
-  max-width: min(100%, calc(100% - 32px));
-  max-height: min(100%, calc(100% - 32px));
   display: block;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
 }
 
-.media-shell img,
-.media-shell video {
+.media-visual {
+  width: 100%;
+  height: 100%;
+}
+
+.media-visual.fit-contain {
   object-fit: contain;
+}
+
+.media-visual.fit-cover {
+  object-fit: cover;
+}
+
+.media-visual.fit-stretch {
+  object-fit: fill;
 }
 
 .media-shell iframe {
@@ -71,15 +82,6 @@ body {
   height: min(100%, calc(100% - 32px));
   border: 0;
   background: #fff;
-}
-
-.display-root.video-fit-cover .media-shell video {
-  width: 100%;
-  height: 100%;
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: cover;
-  box-shadow: none;
 }
 
 .transition-fade .media-shell {
