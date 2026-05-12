@@ -23,7 +23,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY package.json package-lock.json ./
 COPY public ./public
 COPY server.js ./server.js
-COPY data ./data
+RUN mkdir -p /app/data/state /app/data/uploads
 
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0

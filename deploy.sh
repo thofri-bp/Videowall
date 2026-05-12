@@ -13,9 +13,18 @@ fi
 if docker compose version >/dev/null 2>&1; then
   COMPOSE_CMD=(docker compose)
 elif command -v docker-compose >/dev/null 2>&1; then
-  COMPOSE_CMD=(docker-compose)
+  if docker-compose version >/dev/null 2>&1; then
+    COMPOSE_CMD=(docker-compose)
+  else
+    echo "Fehler: Das installierte 'docker-compose' ist nicht lauffaehig."
+    echo "Ursache ist oft Docker Compose v1 mit Python 3.12 ('No module named distutils')."
+    echo "Bitte Docker Compose v2 installieren und danach erneut starten."
+    echo "Beispiel fuer Debian/Ubuntu: apt-get update && apt-get install -y docker-compose-plugin"
+    exit 1
+  fi
 else
-  echo "Fehler: weder 'docker compose' noch 'docker-compose' ist verfuegbar."
+  echo "Fehler: weder 'docker compose' noch ein funktionierendes 'docker-compose' ist verfuegbar."
+  echo "Bitte Docker Compose v2 installieren."
   exit 1
 fi
 

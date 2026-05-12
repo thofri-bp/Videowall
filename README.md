@@ -63,6 +63,11 @@ Fuer Zugriff aus dem Netzwerk:
 
 ## Docker Compose
 
+Voraussetzung fuer den Server:
+
+- Empfohlen ist Docker Compose v2 (`docker compose`)
+- Das alte `docker-compose` v1 kann auf Systemen mit Python 3.12 mit `No module named 'distutils'` scheitern
+
 Mit Docker Compose ist der Start noch einfacher:
 
 ```bash
