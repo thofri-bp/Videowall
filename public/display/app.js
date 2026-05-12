@@ -67,10 +67,13 @@ function getDocumentTotalDurationMs(item) {
 function getDisplayConfig(item) {
   const baseFit = item.displayFit || (item.type === "video" ? (state.settings?.videoFit || "max") : "max");
   const normalizedFit = baseFit === "contain" ? "max" : baseFit;
-  const effectiveFit = item.type === "video" && item.videoShowComplete ? "max" : normalizedFit;
+  const videoShowComplete = item.type === "video" && item.videoShowComplete;
+  const effectiveFit = videoShowComplete ? "max" : normalizedFit;
+  const rawScalePercent = Math.max(10, Number(item.displayScalePercent || 100));
+  const effectiveScalePercent = (effectiveFit === "stretch" || videoShowComplete) ? 100 : rawScalePercent;
   return {
     fit: effectiveFit,
-    scalePercent: Math.max(10, Number(item.displayScalePercent || 100)),
+    scalePercent: effectiveScalePercent,
     position: item.displayPosition || "center"
   };
 }

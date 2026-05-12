@@ -97,6 +97,42 @@ function renderSettings() {
   document.getElementById("backgroundValueInput").value = state.settings.background.value;
 }
 
+function getDisplaySettingsHint({ fit, isVideo, showComplete }) {
+  if (isVideo && showComplete) {
+    return "Komplett anzeigen ist aktiv. Das Video bleibt komplett sichtbar, daher sind Anzeigeart und Skalierung gesperrt.";
+  }
+  if (fit === "stretch") {
+    return "Bei Strecken ist die Skalierung gesperrt, weil das Medium bereits auf die volle Fläche gezogen wird.";
+  }
+  if (fit === "max") {
+    return "Maximal ohne Rand vergrößert das Medium automatisch bis an die Grenze, ohne es abzuschneiden.";
+  }
+  if (fit === "original") {
+    return "Originalgröße zeigt das Medium in seiner Basisgröße. Die Skalierung kann es zusätzlich vergrößern oder verkleinern.";
+  }
+  return "Skalierung wirkt zusätzlich zur gewählten Anzeigeart.";
+}
+
+function syncDisplayControlState(li, itemType) {
+  const fitSelect = li.querySelector(".display-fit-select");
+  const scaleInput = li.querySelector(".display-scale");
+  const hint = li.querySelector(".display-settings-hint");
+  const isVideo = itemType === "video";
+  const showCompleteCheckbox = isVideo ? li.querySelector(".video-show-complete") : null;
+  const showComplete = Boolean(showCompleteCheckbox?.checked);
+  const fit = fitSelect.value;
+
+  const disableFit = isVideo && showComplete;
+  const disableScale = fit === "stretch" || (isVideo && showComplete);
+
+  fitSelect.disabled = disableFit;
+  scaleInput.disabled = disableScale;
+
+  if (hint) {
+    hint.textContent = getDisplaySettingsHint({ fit, isVideo, showComplete });
+  }
+}
+
 function renderMedia() {
   mediaList.innerHTML = "";
   emptyState.classList.toggle("hidden", state.media.length > 0);
@@ -159,7 +195,7 @@ function renderMedia() {
                 <input class="video-duration mini-input" type="number" min="1" max="3600" value="${item.durationSeconds || 15}">
               </label>
             ` : ""}
-            <p class="hint">` + (item.type === "video" ? "Bei aktiviertem Haken wird das Video komplett sichtbar gehalten." : "Skalierung wirkt zusätzlich zur gewählten Anzeigeart.") + `</p>
+            <p class="hint display-settings-hint"></p>
           </div>
         ` : ""}
         ${item.type === "document" ? `
@@ -217,6 +253,7 @@ function renderMedia() {
 
     if (item.type === "image" || item.type === "video") {
       const saveDisplaySettings = async () => {
+        syncDisplayControlState(li, item.type);
         const payload = {
           displayFit: li.querySelector(".display-fit-select").value,
           displayPosition: li.querySelector(".display-position-select").value,
@@ -229,6 +266,7 @@ function renderMedia() {
         await updateMedia(item.id, payload);
       };
 
+      syncDisplayControlState(li, item.type);
       li.querySelector(".display-fit-select").addEventListener("change", saveDisplaySettings);
       li.querySelector(".display-position-select").addEventListener("change", saveDisplaySettings);
       li.querySelector(".display-scale").addEventListener("change", saveDisplaySettings);
