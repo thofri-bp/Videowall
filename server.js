@@ -13,12 +13,14 @@ const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || "127.0.0.1";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "videowall-admin";
+const ADMIN_PASSWORD_FORCE_UPDATE = ["1", "true", "yes", "on"].includes(String(process.env.ADMIN_PASSWORD_FORCE_UPDATE || "").toLowerCase());
 
 const DATA_DIR = path.join(__dirname, "data");
 const STATE_DIR = path.join(DATA_DIR, "state");
 const UPLOAD_DIR = path.join(DATA_DIR, "uploads");
 const MEDIA_FILE = path.join(STATE_DIR, "media.json");
 const SETTINGS_FILE = path.join(STATE_DIR, "settings.json");
+const ADMIN_FILE = path.join(STATE_DIR, "admin.json");
 
 const sessions = new Map();
 const IMAGE_TYPES = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"]);
@@ -38,6 +40,8 @@ const defaultSettings = {
     value: "linear-gradient(135deg, #0f172a 0%, #111827 50%, #1f2937 100%)"
   }
 };
+
+let adminState = null;
 
 function ensureDirectories() {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -68,6 +72,47 @@ async function readJson(filePath, fallback) {
 
 async function writeJson(filePath, data) {
   await fsp.writeFile(filePath, JSON.stringify(data, null, 2), "utf8");
+}
+
+function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
+  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
+  return { salt, hash };
+}
+
+function verifyPassword(password, config) {
+  if (!config?.salt || !config?.hash) return false;
+  const candidateHash = crypto.scryptSync(password, config.salt, 64);
+  const storedHash = Buffer.from(config.hash, "hex");
+  if (candidateHash.length !== storedHash.length) return false;
+  return crypto.timingSafeEqual(candidateHash, storedHash);
+}
+
+async function ensureAdminState() {
+  const existing = await readJson(ADMIN_FILE, null);
+
+  if (existing?.salt && existing?.hash && !ADMIN_PASSWORD_FORCE_UPDATE) {
+    adminState = existing;
+    return adminState;
+  }
+
+  if (existing?.salt && existing?.hash && ADMIN_PASSWORD_FORCE_UPDATE) {
+    console.log("Admin password override requested via ADMIN_PASSWORD_FORCE_UPDATE.");
+  }
+
+  const nextState = {
+    ...hashPassword(ADMIN_PASSWORD),
+    updatedAt: new Date().toISOString()
+  };
+  await writeJson(ADMIN_FILE, nextState);
+  adminState = nextState;
+
+  if (existing?.salt && existing?.hash) {
+    console.log("Admin password was updated from environment configuration.");
+  } else {
+    console.log("Admin password was initialized and stored persistently.");
+  }
+
+  return adminState;
 }
 
 function parseCookies(cookieHeader = "") {
@@ -364,7 +409,7 @@ app.get("/api/session", (req, res) => {
 
 app.post("/api/login", async (req, res) => {
   const { password } = req.body || {};
-  if (password !== ADMIN_PASSWORD) {
+  if (!verifyPassword(password || "", adminState)) {
     res.status(401).json({ error: "Invalid password" });
     return;
   }
@@ -579,6 +624,7 @@ app.use((err, _req, res, _next) => {
 async function start() {
   ensureDirectories();
   await ensureStateFiles();
+  await ensureAdminState();
   app.listen(PORT, HOST, () => {
     console.log(`VideoWall server listening on http://${HOST}:${PORT}`);
   });

@@ -16,7 +16,9 @@ Fuer Zugriff aus dem lokalen Netzwerk den Host explizit setzen:
 ## Standardzugang
 
 - Passwort: `videowall-admin`
-- Optional per Umgebungsvariable setzen: `ADMIN_PASSWORD=mein-passwort npm start`
+- Optional beim ersten Start per Umgebungsvariable setzen: `ADMIN_PASSWORD=mein-passwort npm start`
+- Das Passwort wird danach persistent in `data/state/admin.json` gespeichert
+- Ein spaeteres Ueberschreiben per Umgebungsvariable passiert nur mit `ADMIN_PASSWORD_FORCE_UPDATE=1`
 
 ## Funktionen
 
@@ -51,6 +53,18 @@ docker run -d \
   videowall
 ```
 
+Passwort spaeter bewusst aendern:
+
+```bash
+docker run -d \
+  --name videowall \
+  -p 80:3000 \
+  -e ADMIN_PASSWORD=neues-passwort \
+  -e ADMIN_PASSWORD_FORCE_UPDATE=1 \
+  -v videowall_data:/app/data \
+  videowall
+```
+
 Danach erreichbar unter:
 
 - Admin: `http://localhost/admin`
@@ -79,6 +93,12 @@ Oder mit dem Deploy-Skript:
 ```bash
 chmod +x deploy.sh
 ADMIN_PASSWORD=mein-passwort ./deploy.sh
+```
+
+Passwort spaeter bewusst aendern:
+
+```bash
+ADMIN_PASSWORD=neues-passwort ADMIN_PASSWORD_FORCE_UPDATE=1 ./deploy.sh
 ```
 
 Stoppen:
