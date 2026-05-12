@@ -1,7 +1,8 @@
-FROM node:20-bookworm-slim AS build
+FROM node:20-bullseye-slim AS build
 
 WORKDIR /app
 ENV npm_config_python=/usr/bin/python3
+ENV PYTHON=/usr/bin/python3
 
 # Build toolchain for npm packages that may fall back to native builds.
 RUN apt-get update \
@@ -19,7 +20,7 @@ RUN apt-get update \
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
 
-FROM node:20-bookworm-slim
+FROM node:20-bullseye-slim
 
 WORKDIR /app
 
